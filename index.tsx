@@ -8,11 +8,22 @@ import { DashboardPage } from './pages/DashboardPage.tsx';
 import { NewThreadPage } from './pages/NewThreadPage.tsx';
 import { IntegrationsPage } from './pages/IntegrationsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
+import { QueuePage } from './pages/QueuePage.tsx';
+import { AuthPage } from './pages/AuthPage.tsx';
 import { NoWorkspaceView } from './pages/NoWorkspaceView.tsx';
 
 // --- MAIN APP COMPONENT ---
 const App = () => {
-  const { activeView, currentAccountId } = useAppContext();
+  const { activeView, currentAccountId, user } = useAppContext();
+
+  console.log("App component rendered. User:", user);
+
+  if (!user || !user.uid) {
+    console.log("App: User not logged in, rendering AuthPage.");
+    return <AuthPage />;
+  }
+
+  console.log("App: User logged in, rendering main content.");
 
   const renderContent = () => {
     const workspaceRequiredViews = ["dashboard", "new-thread"];
@@ -29,6 +40,8 @@ const App = () => {
         return <IntegrationsPage />;
       case "settings":
         return <SettingsPage />;
+      case "queue":
+        return <QueuePage />;
       default:
         return <DashboardPage />;
     }

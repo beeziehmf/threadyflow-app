@@ -1,5 +1,5 @@
 import React from 'react';
-import { HomeIcon, PlusCircleIcon, PuzzleIcon, SettingsIcon } from './icons.tsx';
+import { HomeIcon, PlusCircleIcon, PuzzleIcon, SettingsIcon, ListBulletIcon } from './icons.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
 import type { Account } from '../types/types.tsx';
 
@@ -60,6 +60,7 @@ export const Sidebar: React.FC = () => {
                  <ul className="sidebar-nav">
                     {accounts.map(acc => <WorkspaceLink key={acc.id} account={acc} />)}
                      <NavLink view="integrations" icon={<PuzzleIcon />} text="Integrations" />
+                     <NavLink view="queue" icon={<ListBulletIcon />} text="Queue" />
                 </ul>
 
                 <div className="sidebar-footer">

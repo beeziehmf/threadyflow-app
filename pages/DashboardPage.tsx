@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '../components/icons.tsx';
 import { PostDetailModal } from '../components/PostDetailModal.tsx';
-import type { ScheduledPost } from '../types/types.tsx';
+import type { ScheduledPost, ContentPillar } from '../types/types.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
 
 export const DashboardPage: React.FC = () => {
-    const { scheduledPosts, accounts, currentAccountId } = useAppContext();
+    const { scheduledPosts, accounts, currentAccountId, contentPillars, processQueue, queuedPosts } = useAppContext();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [modalPost, setModalPost] = useState<ScheduledPost | null>(null);
 
@@ -83,11 +83,15 @@ export const DashboardPage: React.FC = () => {
                                 <div className="day-content">
                                     <span className="day-number">{date.getDate()}</span>
                                     <div className="day-posts">
-                                        {posts.map(post => (
-                                            <button key={post.id} className={`calendar-post-item ${post.platform.toLowerCase()}`} onClick={() => setModalPost(post)}>
-                                                {post.threadTitle}
-                                            </button>
-                                        ))}
+                                        {posts.map(post => {
+                                            const pillar = contentPillars.find(p => p.id === post.pillarId);
+                                            return (
+                                                <button key={post.id} className={`calendar-post-item ${post.platform.toLowerCase()}`} onClick={() => setModalPost(post)}>
+                                                    {pillar && <span className="pillar-dot" style={{ backgroundColor: pillar.color }}></span>}
+                                                    {post.threadTitle}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>

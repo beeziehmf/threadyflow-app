@@ -5,14 +5,25 @@ import {
 } from '../components/icons.tsx';
 import { ThreadPostView } from '../components/ThreadPostView.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
+import type { ImprovementSuggestion } from '../types/types.tsx';
 
 export const NewThreadPage: React.FC = () => {
     const {
         idea, setIdea, 
+        theme, setTheme,
+        generatedIdeas, handleGenerateIdeas,
+        tone, setTone,
+        style, setStyle,
+        contentPillars,
+        selectedPillarId, setSelectedPillarId,
         isLoading, error, generatedThread, handleGenerateThread, handlePostChange,
         csvData, csvFileName, handleFileUpload, handleRemoveFile, handleUseRandomIdea,
         accounts, currentAccountId,
-        scheduleDate, setScheduleDate, scheduleTime, setScheduleTime, handleSchedule
+        scheduleDate, setScheduleDate, scheduleTime, setScheduleTime, handleSchedule,
+        addToQueue,
+        showApiLimitExceeded,
+        analyzedVoice, useAnalyzedVoiceForGeneration, setUseAnalyzedVoiceForGeneration,
+        handleSuggestImprovements
     } = useAppContext();
 
     const account = accounts.find(a => a.id === currentAccountId);
@@ -48,7 +59,78 @@ export const NewThreadPage: React.FC = () => {
                         <LightBulbIcon />
                         1. Start with an Idea
                     </h2>
-                    <p className="card-description">Enter a topic, or import a list of ideas from a CSV file.</p>
+                    <p className="card-description">Enter a topic, get AI-generated ideas, or import a list from a CSV file.</p>
+                </div>
+
+                <div className="idea-input-wrapper">
+                    <textarea 
+                        id="theme-input" className="textarea" 
+                        placeholder="e.g., 'AI in marketing'"
+                        value={theme} onChange={(e) => setTheme(e.target.value)} disabled={isLoading}
+                        rows={2}
+                    />
+                    <button className="button generate-button" onClick={handleGenerateIdeas} disabled={isLoading || !theme.trim()}>
+                        <SparklesIcon />
+                        {isLoading ? 'Getting Ideas...' : 'Get Ideas'}
+                    </button>
+                </div>
+
+                {generatedIdeas.length > 0 && (
+                    <div className="generated-ideas-list">
+                        <p>Click an idea to use it:</p>
+                        <ul>
+                            {generatedIdeas.map((idea, index) => (
+                                <li key={index} onClick={() => setIdea(idea)}>{idea}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                <div className="or-divider-small">OR</div>
+
+                <div className="generation-controls">
+                    {analyzedVoice && (
+                        <div className="form-group flex items-center space-x-2">
+                            <input 
+                                type="checkbox" 
+                                id="use-analyzed-voice" 
+                                checked={useAnalyzedVoiceForGeneration}
+                                onChange={(e) => setUseAnalyzedVoiceForGeneration(e.target.checked)}
+                                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <label htmlFor="use-analyzed-voice" className="text-sm font-medium text-gray-700">
+                                Use Analyzed Voice ({analyzedVoice.tone} / {analyzedVoice.style})
+                            </label>
+                        </div>
+                    )}
+                    <div className="form-group">
+                        <label htmlFor="tone-select">Tone</label>
+                        <select 
+                            id="tone-select" 
+                            value={useAnalyzedVoiceForGeneration && analyzedVoice ? analyzedVoice.tone : tone} 
+                            onChange={(e) => setTone(e.target.value)} 
+                            disabled={isLoading || (useAnalyzedVoiceForGeneration && analyzedVoice !== null)}
+                        >
+                            <option value="professional">Professional</option>
+                            <option value="casual">Casual</option>
+                            <option value="humorous">Humorous</option>
+                            <option value="inspirational">Inspirational</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="style-select">Style</label>
+                        <select 
+                            id="style-select" 
+                            value={useAnalyzedVoiceForGeneration && analyzedVoice ? analyzedVoice.style : style} 
+                            onChange={(e) => setStyle(e.target.value)} 
+                            disabled={isLoading || (useAnalyzedVoiceForGeneration && analyzedVoice !== null)}
+                        >
+                            <option value="informative">Informative</option>
+                            <option value="storytelling">Storytelling</option>
+                            <option value="list">List</option>
+                            <option value="question">Question</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div className="idea-input-wrapper">
@@ -60,7 +142,7 @@ export const NewThreadPage: React.FC = () => {
                     />
                     <button className="button generate-button" onClick={handleGenerateThread} disabled={isLoading || !idea.trim()}>
                         {isLoading ? <div className="spinner" style={{width: '16px', height: '16px'}}></div> : <SparklesIcon />}
-                        {isLoading ? 'Generating...' : 'Generate with AI'}
+                        {isLoading ? 'Generating...' : 'Generate Thread'}
                     </button>
                 </div>
 
@@ -102,6 +184,12 @@ export const NewThreadPage: React.FC = () => {
 
         {isLoading && <div className="loader-container card"><div className="spinner"></div><p>AI is crafting your thread...</p></div>}
         {error && <div className="error-message">{error}</div>}
+        {showApiLimitExceeded && (
+            <div className="error-message">
+                <p>You have reached the generation limit for this session (30 generations).</p>
+                <p>To continue generating content, please provide your own Gemini API key in the <code>.env.local</code> file.</p>
+            </div>
+        )}
 
         {generatedThread && (
             <div className="card thread-editor">
@@ -120,6 +208,7 @@ export const NewThreadPage: React.FC = () => {
                             totalPosts={generatedThread.posts.length}
                             account={account}
                             onPostChange={handlePostChange}
+                            onSuggestImprovements={handleSuggestImprovements}
                        />
                     ))}
                 </div>
@@ -144,8 +233,18 @@ export const NewThreadPage: React.FC = () => {
                             <label htmlFor="schedule-time">Time</label>
                             <input type="time" id="schedule-time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} />
                         </div>
+                        <div className="form-group">
+                            <label htmlFor="pillar-select">Content Pillar</label>
+                            <select id="pillar-select" value={selectedPillarId || ''} onChange={(e) => setSelectedPillarId(e.target.value)}>
+                                <option value="">None</option>
+                                {contentPillars.map(pillar => (
+                                    <option key={pillar.id} value={pillar.id}>{pillar.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                     <button className="button" onClick={handleSchedule} disabled={!currentAccountId || !scheduleDate || !scheduleTime}>Schedule Thread</button>
+                    <button className="button-secondary" onClick={addToQueue} disabled={!currentAccountId || !generatedThread}>Add to Queue</button>
                 </div>
             </div>
         )}
