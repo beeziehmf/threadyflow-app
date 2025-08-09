@@ -5,7 +5,7 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCBIeq-ha5RdkC4YkBdfS_xrZDeGGq-iag",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "threadify-ai-app.firebaseapp.com",
   projectId: "threadify-ai-app",
   storageBucket: "threadify-ai-app.firebasestorage.app",

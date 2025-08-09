@@ -1,15 +1,56 @@
 import React from 'react';
 import type { Account } from '../types/types.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
+import { auth, facebookProvider } from '../services/firebaseConfig';
+import { signInWithPopup, FacebookAuthProvider } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export const IntegrationsPage: React.FC = () => {
     const { accounts, setAccounts, addActivity } = useAppContext();
+    const functions = getFunctions();
+    const exchangeToken = httpsCallable(functions, 'exchangeFacebookTokenForThreadsInfo');
 
-    const handleConnect = (platform: 'Threads' | 'Instagram' | 'Facebook') => {
-        const newName = `@${platform.toLowerCase()}_user_${Math.floor(Math.random() * 1000)}`;
-        const newAccount: Account = { id: Date.now(), platform, name: newName };
-        setAccounts((prevAccounts: Account[]) => [...prevAccounts, newAccount]);
-        addActivity(`Connected new ${platform} account: ${newName}`);
+    const handleConnect = async (platform: 'Threads' | 'Instagram' | 'Facebook') => {
+        if (platform === 'Threads') {
+            try {
+                facebookProvider.addScope('threads_basic');
+                facebookProvider.addScope('threads_content_publish');
+                // Requesting 'pages_show_list' and 'instagram_basic' for getting Instagram Business Account ID
+                facebookProvider.addScope('pages_show_list');
+                facebookProvider.addScope('instagram_basic');
+
+                const result = await signInWithPopup(auth, facebookProvider);
+                const user = result.user;
+                const credential = FacebookAuthProvider.credentialFromResult(result);
+                const accessToken = credential?.accessToken; // This is the short-lived Facebook Access Token
+
+                if (accessToken) {
+                    addActivity("Exchanging token for Threads info...");
+                    const response = await exchangeToken({ accessToken });
+                    const threadsAccountId = (response.data as any).instagramBusinessAccountId;
+                    const threadsUsername = (response.data as any).username;
+
+                    if (threadsAccountId && threadsUsername) {
+                        const newAccount: Account = { id: Date.now(), platform: 'Threads', name: `@${threadsUsername}` };
+                        setAccounts((prevAccounts: Account[]) => [...prevAccounts, newAccount]);
+                        addActivity(`Connected new Threads account: ${newAccount.name}`);
+                        console.log('Threads Account Connected:', threadsAccountId, threadsUsername);
+                    } else {
+                        throw new Error("Could not retrieve Threads account ID.");
+                    }
+                } else {
+                    throw new Error("Facebook Access Token not found.");
+                }
+            } catch (error: any) {
+                console.error("Error connecting to Threads:", error);
+                addActivity(`Failed to connect Threads account: ${error.message}`);
+            }
+        } else {
+            const newName = `@${platform.toLowerCase()}_user_${Math.floor(Math.random() * 1000)}`;
+            const newAccount: Account = { id: Date.now(), platform, name: newName };
+            setAccounts((prevAccounts: Account[]) => [...prevAccounts, newAccount]);
+            addActivity(`Connected new ${platform} account: ${newName}`);
+        }
     };
 
     const handleDisconnect = (id: number) => {
