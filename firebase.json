@@ -18,8 +18,12 @@
       ],
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run build"
-      ]
-    }
+      ],
+      "environmentVariables": {
+        "FACEBOOK_APP_ID": "1812461859343676",
+        "FACEBOOK_APP_SECRET": "a1577e3e5c9cfc60c0b84b20635656ce"
+      }
+    } // Force redeploy comment
   ],
   "hosting": {
     "public": "dist",

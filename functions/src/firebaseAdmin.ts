@@ -1,15 +1,17 @@
 import { initializeApp, getApps, getApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import * as admin from "firebase-admin";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import * as firebaseAdmin from "firebase-admin"; // Use a different name to avoid conflict
 
 const apps = getApps();
-let firebaseApp;
+let firebaseAppInstance;
 
 if (!apps.length) {
-  firebaseApp = initializeApp();
+  firebaseAppInstance = initializeApp();
 } else {
-  firebaseApp = getApp();
+  firebaseAppInstance = getApp();
 }
 
-export { admin }; // Export the admin object
-export const db = getFirestore(firebaseApp);
+// Export the initialized admin object
+export const admin = firebaseAdmin; 
+export const db = getFirestore(firebaseAppInstance);
+export { FieldValue }; // Export FieldValue directly

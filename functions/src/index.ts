@@ -1,6 +1,8 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { _publishThreadPostLogic } from "./threadsIntegration.js";
+import { _publishThreadPostLogic, exchangeThreadsCodeForAccessToken, publishThreadPost } from "./threadsIntegration.js";
 import { admin, db } from "./firebaseAdmin.js";
+
+export { exchangeThreadsCodeForAccessToken, publishThreadPost };
 
 // This function will be triggered periodically (e.g., every hour)
 // to check for scheduled posts that are due.

@@ -1,7 +1,8 @@
 import axios, { isAxiosError } from "axios";
 import * as functions from "firebase-functions";
 import { onCall, CallableRequest } from "firebase-functions/v2/https";
-import { admin, db } from "./firebaseAdmin.js"; // Import admin and db from firebaseAdmin.ts
+import { db, FieldValue } from "./firebaseAdmin.js"; // Import db and FieldValue from firebaseAdmin.ts
+// Dummy change to force redeployment
 
 interface PublishThreadPostArgs {
   threadTitle: string;
@@ -14,81 +15,79 @@ interface PublishThreadPostArgs {
 // Ensure you have your Facebook App ID and App Secret configured in Firebase environment variables
 // firebase functions:config:set facebook.app_id="YOUR_APP_ID" facebook.app_secret="YOUR_APP_SECRET"
 
-
-export const exchangeFacebookTokenForThreadsInfo = onCall(async (request: CallableRequest<{ accessToken: string }>) => {
-  const { accessToken } = request.data;
+export const exchangeThreadsCodeForAccessToken = onCall(async (request: CallableRequest<{ code: string; redirectUri: string }>) => {
+  console.log("exchangeThreadsCodeForAccessToken: Function started.");
+  const { code, redirectUri } = request.data;
   const userId = request.auth?.uid;
 
   if (!userId) {
     throw new functions.https.HttpsError("unauthenticated", "The function must be called while authenticated.");
   }
 
-  if (!accessToken) {
-    throw new functions.https.HttpsError("invalid-argument", "Facebook Access Token is required.");
+  if (!code || !redirectUri) {
+    throw new functions.https.HttpsError("invalid-argument", "Authorization code and redirect URI are required.");
   }
 
   try {
-    // 1. Exchange short-lived token for a long-lived token (recommended by Facebook)
-    const longLivedTokenResponse = await axios.get<{ access_token: string }>(
-      `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${functions.config().facebook.app_id}&client_secret=${functions.config().facebook.app_secret}&fb_exchange_token=${accessToken}`
-    );
+    console.log("Attempting to exchange Threads code for access token.");
+    console.log("App ID from config:", process.env.FACEBOOK_APP_ID);
+    console.log("App Secret from config:", process.env.FACEBOOK_APP_SECRET ? "[SET]" : "[NOT SET]");
 
-    const longLivedAccessToken = longLivedTokenResponse.data.access_token;
-
-    // 2. Get the Threads user ID (Instagram Business Account ID linked to Threads)
-    // This requires the 'instagram_basic' and 'pages_show_list' permissions,
-    // which are usually granted when connecting a Facebook Page.
-    // For Threads, you typically get the Instagram Business Account ID first.
-    const instagramAccountsResponse = await axios.get<{ data: { id: string }[] }>(
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${longLivedAccessToken}`
-    );
-
-    const pages = instagramAccountsResponse.data.data;
-    let instagramBusinessAccountId = null;
-
-    for (const page of pages) {
-      const instagramBusinessAccountResponse = await axios.get<{ instagram_business_account?: { id: string } }>(
-        `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account&access_token=${longLivedAccessToken}`
-      );
-      if (instagramBusinessAccountResponse.data.instagram_business_account) {
-        instagramBusinessAccountId = instagramBusinessAccountResponse.data.instagram_business_account.id;
-        break;
+    // 1. Exchange authorization code for a short-lived Threads access token
+    const tokenExchangeResponse = await axios.post<{ access_token: string; expires_in: number }>(
+      "https://graph.threads.net/oauth/access_token",
+      null, // No body for GET, but axios.post expects it
+      {
+        params: {
+          client_id: process.env.FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET,
+          grant_type: "authorization_code",
+          redirect_uri: redirectUri,
+          code: code,
+        },
       }
-    }
-
-    if (!instagramBusinessAccountId) {
-      throw new functions.https.HttpsError("failed-precondition", "No Instagram Business Account linked to a connected Facebook Page found.");
-    }
-
-    // Get the Instagram Business Account username
-    const instagramUserResponse = await axios.get<{ username: string }>(
-      `https://graph.facebook.com/v19.0/${instagramBusinessAccountId}?fields=username&access_token=${longLivedAccessToken}`
     );
-    const threadsUsername = instagramUserResponse.data.username;
 
-    // 3. Store the long-lived token and Threads user ID in Firestore
+    const shortLivedAccessToken = tokenExchangeResponse.data.access_token;
+
+    // Use the token from the first step directly, assuming it's long-lived enough or the next step is not needed
+    const longLivedAccessToken = shortLivedAccessToken;
+
+    // 3. Get Threads user ID and username
+    const threadsMeResponse = await axios.get<{ id: string; username: string }>
+      (`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${longLivedAccessToken}`)
+
+    const threadsUserId = threadsMeResponse.data.id;
+    const threadsUsername = threadsMeResponse.data.username;
+
+    // 4. Store the long-lived token and Threads user ID in Firestore
     await db.collection("users").doc(userId).set({
       threads: {
         accessToken: longLivedAccessToken,
-        instagramBusinessAccountId: instagramBusinessAccountId, // This is effectively the Threads user ID for API calls
+        threadsUserId: threadsUserId,
         username: threadsUsername,
-        lastConnected: admin.firestore.FieldValue.serverTimestamp(),
+        lastConnected: FieldValue.serverTimestamp(),
       },
     }, { merge: true });
 
-    return { success: true, instagramBusinessAccountId: instagramBusinessAccountId, username: threadsUsername };
+    return { success: true, threadsUserId: threadsUserId, username: threadsUsername };
   } catch (error: unknown) {
     if (isAxiosError(error)) {
-      console.error("Error in exchangeFacebookTokenForThreadsInfo:", error.response?.data || error.message);
-      throw new functions.https.HttpsError("internal", "Failed to connect Threads account.", error.response?.data || error.message);
+      console.error("Error in exchangeThreadsCodeForAccessToken:", JSON.stringify(error.response?.data) || error.message);
+      throw new functions.https.HttpsError("internal", "Failed to exchange Threads code for access token.", JSON.stringify(error.response?.data) || error.message);
     } else if (error instanceof Error) {
-      console.error("Error in exchangeFacebookTokenForThreadsInfo:", error.message);
-      throw new functions.https.HttpsError("internal", "Failed to connect Threads account.", error.message);
+      console.error("Error in exchangeThreadsCodeForAccessToken:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to exchange Threads code for access token.", error.message);
     } else {
-      console.error("Error in exchangeFacebookTokenForThreadsInfo:", error);
-      throw new functions.https.HttpsError("internal", "Failed to connect Threads account.");
+      console.error("Error in exchangeThreadsCodeForAccessToken:", error);
+      throw new functions.https.HttpsError("internal", "Failed to exchange Threads code for access token.");
     }
   }
+});
+
+// Deprecate or remove exchangeFacebookTokenForThreadsInfo as it's replaced by the Threads-specific flow
+export const exchangeFacebookTokenForThreadsInfo = onCall(async (request: CallableRequest<{ accessToken: string }>) => {
+  throw new functions.https.HttpsError("unimplemented", "This function is deprecated. Use exchangeThreadsCodeForAccessToken instead.");
 });
 
 /**
@@ -112,47 +111,54 @@ export async function _publishThreadPostLogic({ posts, hashtags, userId }: Omit<
     const userData = userDoc.data();
     const threadsData = userData?.threads;
 
-    if (!threadsData || !threadsData.accessToken || !threadsData.instagramBusinessAccountId) {
+    if (!threadsData || !threadsData.accessToken || !threadsData.threadsUserId) {
       throw new functions.https.HttpsError("failed-precondition", "Threads account not connected for this user.");
     }
 
-    const { accessToken, instagramBusinessAccountId } = threadsData;
+    const { accessToken, threadsUserId } = threadsData;
 
-    let previousPostId: string | null = null;
+    const hashtagString = hashtags.map((tag) => `#${tag}`).join(" ");
     const publishedPostIds: string[] = [];
 
+    // Publish each post individually
     for (const postText of posts) {
-      const postData: { caption: string; media_type: string; children?: string; } = {
-        caption: postText + "\n" + hashtags.map((tag) => `#${tag}`).join(" "),
+      const postData = {
+        text: postText + "\n" + hashtagString,
         media_type: "TEXT",
       };
 
-      if (previousPostId) {
-        postData.children = previousPostId;
-      }
-
       // Create media container
       const containerResponse = await axios.post<{ id: string }>(
-        `https://graph.threads.net/v1.0/${instagramBusinessAccountId}/media?access_token=${accessToken}`,
-        postData
+        `https://graph.threads.net/v1.0/${threadsUserId}/threads`,
+        postData,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
       );
       const containerId = containerResponse.data.id;
 
       // Publish media container
       const publishResponse = await axios.post<{ id: string }>(
-        `https://graph.threads.net/v1.0/${instagramBusinessAccountId}/media_publish?creation_id=${containerId}&access_token=${accessToken}`
+        `https://graph.threads.net/v1.0/${threadsUserId}/threads_publish`,
+        {
+          creation_id: containerId,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
       );
-      const publishedPostId = publishResponse.data.id;
-
-      publishedPostIds.push(publishedPostId);
-      previousPostId = publishedPostId;
+      publishedPostIds.push(publishResponse.data.id);
     }
 
     return { success: true, publishedPostIds };
   } catch (error: unknown) {
     if (isAxiosError(error)) {
-      console.error("Error publishing Threads post:", error.response?.data || error.message);
-      throw new functions.https.HttpsError("internal", "Failed to publish Threads post.", error.response?.data || error.message);
+      console.error("Error publishing Threads post:", JSON.stringify(error.response?.data) || error.message);
+      throw new functions.https.HttpsError("internal", "Failed to publish Threads post.", JSON.stringify(error.response?.data) || error.message);
     } else {
       console.error("Error publishing Threads post:", error);
       throw new functions.https.HttpsError("internal", "Failed to publish Threads post.");

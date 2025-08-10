@@ -1,4 +1,4 @@
-import React, { useState, useRef, ChangeEvent } from 'react';
+import React, { useState, useRef, ChangeEvent, useCallback } from 'react';
 import {
     LightBulbIcon, SparklesIcon, UploadCloudIcon,
     DocumentTextIcon, XCircleIcon
@@ -6,6 +6,7 @@ import {
 import { ThreadPostView } from '../components/ThreadPostView.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
 import type { ImprovementSuggestion } from '../types/types.tsx';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export const NewThreadPage: React.FC = () => {
     const {
@@ -18,7 +19,7 @@ export const NewThreadPage: React.FC = () => {
         selectedPillarId, setSelectedPillarId,
         isLoading, error, generatedThread, handleGenerateThread, handlePostChange,
         csvData, csvFileName, handleFileUpload, handleRemoveFile, handleUseRandomIdea,
-        accounts, currentAccountId,
+        accounts, currentAccountId, user, addActivity,
         scheduleDate, setScheduleDate, scheduleTime, setScheduleTime, handleSchedule,
         addToQueue,
         showApiLimitExceeded,
@@ -27,8 +28,50 @@ export const NewThreadPage: React.FC = () => {
     } = useAppContext();
 
     const account = accounts.find(a => a.id === currentAccountId);
+    const threadsAccount = accounts.find(acc => acc.platform === 'Threads');
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isPosting, setIsPosting] = useState(false); // New state for posting loading
+
+    const functions = getFunctions();
+    const publishThread = httpsCallable(functions, 'publishThreadPost');
+
+    const handlePostNow = useCallback(async () => {
+        if (!generatedThread || !user || !user.uid) {
+            alert("Please generate a thread and ensure you are logged in.");
+            return;
+        }
+
+        const threadsAccount = accounts.find(acc => acc.platform === 'Threads');
+        if (!threadsAccount) {
+            alert("No Threads account connected. Please connect one in Integrations.");
+            return;
+        }
+
+        setIsPosting(true);
+        addActivity(`Attempting to publish thread: "${generatedThread.threadTitle}"`);
+
+        try {
+            // The publishThreadPost Cloud Function will retrieve the accessToken and threadsUserId from Firestore
+            await publishThread({
+                posts: generatedThread.posts.map(p => p.text),
+                hashtags: generatedThread.hashtags,
+                userId: user.uid, // Pass userId for the function to retrieve token
+            });
+            addActivity(`SUCCESS: Thread "${generatedThread.threadTitle}" published to Threads!`);
+            // Clear generated thread after successful post
+            // setGeneratedThread(null);
+            // setIdea('');
+            // setSelectedPillarId(undefined);
+            // setActiveView('dashboard'); // Optionally redirect
+        } catch (e: any) {
+            console.error("Error publishing thread:", e);
+            addActivity(`ERROR: Failed to publish thread: ${e.message || 'Unknown error'}`);
+            alert(`Failed to publish thread: ${e.message || 'Unknown error'}`);
+        } finally {
+            setIsPosting(false);
+        }
+    }, [generatedThread, user, accounts, addActivity, publishThread]);
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -167,7 +210,6 @@ export const NewThreadPage: React.FC = () => {
                             <div className="file-loaded-info" onClick={(e) => e.stopPropagation()}>
                                 <DocumentTextIcon/>
                                 <span className="file-name" title={csvFileName}>{csvFileName}</span>
-                                <button className="remove-file-button" onClick={handleRemoveFile} aria-label="Remove file"><XCircleIcon/></button>
                                 <button className="button-secondary" onClick={handleUseRandomIdea}>Use Random Idea</button>
                             </div>
                         ) : (
@@ -245,6 +287,14 @@ export const NewThreadPage: React.FC = () => {
                     </div>
                     <button className="button" onClick={handleSchedule} disabled={!currentAccountId || !scheduleDate || !scheduleTime}>Schedule Thread</button>
                     <button className="button-secondary" onClick={addToQueue} disabled={!currentAccountId || !generatedThread}>Add to Queue</button>
+                    <button 
+                        className="button" 
+                        onClick={handlePostNow} 
+                        disabled={!generatedThread || !user || !user.uid || !threadsAccount || isPosting || isLoading}
+                        style={{ marginLeft: '10px' }} // Add some spacing
+                    >
+                        {isPosting ? 'Posting...' : 'Post Now'}
+                    </button>
                 </div>
             </div>
         )}

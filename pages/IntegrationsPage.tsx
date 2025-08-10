@@ -1,50 +1,53 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { Account } from '../types/types.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
-import { auth, facebookProvider } from '../services/firebaseConfig';
-import { signInWithPopup, FacebookAuthProvider } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export const IntegrationsPage: React.FC = () => {
     const { accounts, setAccounts, addActivity } = useAppContext();
     const functions = getFunctions();
-    const exchangeToken = httpsCallable(functions, 'exchangeFacebookTokenForThreadsInfo');
+    const exchangeThreadsToken = httpsCallable(functions, 'exchangeThreadsCodeForAccessToken');
 
-    const handleConnect = async (platform: 'Threads' | 'Instagram' | 'Facebook') => {
-        if (platform === 'Threads') {
-            try {
-                facebookProvider.addScope('threads_basic');
-                facebookProvider.addScope('threads_content_publish');
-                // Requesting 'pages_show_list' and 'instagram_basic' for getting Instagram Business Account ID
-                facebookProvider.addScope('pages_show_list');
-                facebookProvider.addScope('instagram_basic');
+    const THREADS_CLIENT_ID = "1812461859343676"; // Your Threads App ID
+    const THREADS_REDIRECT_URI = window.location.origin + window.location.pathname; // Current page as redirect URI
 
-                const result = await signInWithPopup(auth, facebookProvider);
-                const user = result.user;
-                const credential = FacebookAuthProvider.credentialFromResult(result);
-                const accessToken = credential?.accessToken; // This is the short-lived Facebook Access Token
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state'); // Not used for now, but good to capture
 
-                if (accessToken) {
-                    addActivity("Exchanging token for Threads info...");
-                    const response = await exchangeToken({ accessToken });
-                    const threadsAccountId = (response.data as any).instagramBusinessAccountId;
-                    const threadsUsername = (response.data as any).username;
+        if (code) {
+            // Clear the code from the URL to prevent re-processing on refresh
+            window.history.replaceState({}, document.title, window.location.pathname);
 
-                    if (threadsAccountId && threadsUsername) {
+            addActivity("Exchanging Threads authorization code...");
+            exchangeThreadsToken({ code, redirectUri: THREADS_REDIRECT_URI })
+                .then((response: any) => {
+                    const threadsUserId = response.data.threadsUserId;
+                    const threadsUsername = response.data.username;
+
+                    if (threadsUserId && threadsUsername) {
                         const newAccount: Account = { id: Date.now(), platform: 'Threads', name: `@${threadsUsername}` };
                         setAccounts((prevAccounts: Account[]) => [...prevAccounts, newAccount]);
                         addActivity(`Connected new Threads account: ${newAccount.name}`);
-                        console.log('Threads Account Connected:', threadsAccountId, threadsUsername);
+                        console.log('Threads Account Connected:', threadsUserId, threadsUsername);
                     } else {
-                        throw new Error("Could not retrieve Threads account ID.");
+                        throw new Error("Could not retrieve Threads account ID or username.");
                     }
-                } else {
-                    throw new Error("Facebook Access Token not found.");
-                }
-            } catch (error: any) {
-                console.error("Error connecting to Threads:", error);
-                addActivity(`Failed to connect Threads account: ${error.message}`);
-            }
+                })
+                .catch((error: any) => {
+                    console.error("Error exchanging Threads code:", error);
+                    addActivity(`Failed to connect Threads account: ${error.message}`);
+                });
+        }
+    }, [exchangeThreadsToken, setAccounts, addActivity, THREADS_REDIRECT_URI]);
+
+    const handleConnect = async (platform: 'Threads' | 'Instagram' | 'Facebook') => {
+        if (platform === 'Threads') {
+            // Redirect to Threads OAuth authorization URL
+            const authUrl = `https://threads.net/oauth/authorize?client_id=${THREADS_CLIENT_ID}&redirect_uri=${encodeURIComponent(THREADS_REDIRECT_URI)}&scope=threads_basic,threads_content_publish`;
+            // alert(authUrl); // Display the URL in an alert box for debugging
+            window.location.href = authUrl; // Re-enabled redirect
         } else {
             const newName = `@${platform.toLowerCase()}_user_${Math.floor(Math.random() * 1000)}`;
             const newAccount: Account = { id: Date.now(), platform, name: newName };

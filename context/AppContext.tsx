@@ -54,7 +54,7 @@ interface AppContextType {
   handleUnschedule: (postId: number) => void;
   activityLog: ActivityLogEntry[];
   addActivity: (text: string) => void;
-  user: User;
+  user: User | null; // User can be null if not logged in
   updateUser: (updatedUser: Partial<User>) => void;
   userVoiceSamples: UserVoiceSample[];
   addUserVoiceSample: (sample: UserVoiceSample) => void;
@@ -91,12 +91,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [csvData, setCsvData] = useState<string[] | null>(null);
   const [csvFileName, setCsvFileName] = useState<string>('');
   
-  const [accounts, setAccounts] = useState<Account[]>([
-    { id: 1, platform: 'Threads', name: '@corp_solutions' },
-    { id: 2, platform: 'Instagram', name: '@corpsol_insta' },
-  ]);
+  const [accounts, setAccounts] = useState<Account[]>([]); // Initialize as empty array
   
-  const [currentAccountId, setCurrentAccountId] = useState<number | null>(accounts.length > 0 ? accounts[0].id : null);
+  const [currentAccountId, setCurrentAccountId] = useState<number | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   
@@ -121,7 +118,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [currentAccountId, activeView]);
 
-  // Listen to Firebase Auth state changes
+  // Listen to Firebase Auth state changes and load user data
   useEffect(() => {
     console.log("AppContext: Setting up auth state listener.");
     const unsubscribe = auth.onAuthStateChanged(firebaseUser => {
@@ -143,6 +140,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setUserVoiceSamples(data.userVoiceSamples || []);
             setAnalyzedVoice(data.analyzedVoice || null);
             setUseAnalyzedVoiceForGeneration(data.useAnalyzedVoiceForGeneration || false);
+
+            // Load Threads account data
+            if (data.threads) {
+              const threadsAccount: Account = {
+                id: data.threads.threadsUserId, // Use threadsUserId as the account ID
+                platform: 'Threads',
+                name: `@${data.threads.username}`,
+              };
+              setAccounts([threadsAccount]); // Assuming one Threads account for now
+            } else {
+              setAccounts([]); // No Threads account connected
+            }
+
           } else {
             console.log("AppContext: Initializing new user data in Firestore.");
             // Initialize user data in Firestore if it doesn't exist
@@ -155,7 +165,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               userVoiceSamples: [],
               analyzedVoice: null,
               useAnalyzedVoiceForGeneration: false,
+              threads: null, // Initialize threads to null
             });
+            setAccounts([]);
           }
         }).catch(e => {
           console.error("AppContext: Error loading/initializing user data from Firestore:", e);
@@ -170,6 +182,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setQueueSchedule({ days: [1, 3, 5], times: ["09:00"] });
         setScheduledPosts([]);
         setGenerationCount(0);
+        setAccounts([]); // Clear accounts on sign out
       }
     });
     return () => {
@@ -180,9 +193,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Save user data to Firestore whenever relevant state changes
   useEffect(() => {
-    if (user && user.email) {
+    if (user && user.uid) { // Use uid for consistency
       console.log("AppContext: User data changed, saving to Firestore.", user);
-      const userDocRef = doc(db, "users", auth.currentUser!.uid);
+      const userDocRef = doc(db, "users", user.uid);
       setDoc(userDocRef, {
         contentPillars,
         queuedPosts,
@@ -192,13 +205,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         userVoiceSamples,
         analyzedVoice,
         useAnalyzedVoiceForGeneration,
+        // Save threads data if available in accounts state
+        threads: accounts.find(acc => acc.platform === 'Threads') ? accounts.find(acc => acc.platform === 'Threads') : null,
       }, { merge: true }).catch(e => {
         console.error("AppContext: Error saving user data to Firestore:", e);
       });
     } else if (user === null) {
       console.log("AppContext: User is null, not saving to Firestore.");
     }
-  }, [user, contentPillars, queuedPosts, queueSchedule, scheduledPosts, generationCount, userVoiceSamples, analyzedVoice, useAnalyzedVoiceForGeneration]);
+  }, [user, contentPillars, queuedPosts, queueSchedule, scheduledPosts, generationCount, userVoiceSamples, analyzedVoice, useAnalyzedVoiceForGeneration, accounts]); // Add accounts to dependency array
 
   // Process queue on app load (and whenever scheduledPosts or queuedPosts change)
   useEffect(() => {
@@ -353,7 +368,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const randomIndex = Math.floor(Math.random() * csvData.length);
       const randomIdea = csvData[randomIndex];
       setIdea(randomIdea);
-      addActivity(`Used random idea: "${randomIdea.substring(0,30)}..."`);
+      addActivity(`Used random idea: "${randomIdea.substring(0,30)}"...`);
     }
   };
   
@@ -400,25 +415,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [addActivity]);
 
   const updateUser = useCallback((updatedUser: Partial<User>) => {
-    setUser(prev => ({...prev, ...updatedUser}));
+    setUser(prev => (prev ? {...prev, ...updatedUser} : null)); // Handle prev being null
     addActivity(`Updated user profile information.`);
   }, [addActivity]);
 
   const addUserVoiceSample = useCallback((sample: UserVoiceSample) => {
     setUserVoiceSamples(prev => [...prev, sample]);
-    addActivity(`Added voice sample: "${sample.text.substring(0, 30)}..."`);
+    addActivity(`Added voice sample: "${sample.text.substring(0, 30)}"...`);
   }, [addActivity]);
 
   const updateUserVoiceSample = useCallback((updatedSample: UserVoiceSample) => {
     setUserVoiceSamples(prev => prev.map(s => s.id === updatedSample.id ? updatedSample : s));
-    addActivity(`Updated voice sample: "${updatedSample.text.substring(0, 30)}..."`);
+    addActivity(`Updated voice sample: "${updatedSample.text.substring(0, 30)}"...`);
   }, [addActivity]);
 
   const deleteUserVoiceSample = useCallback((id: string) => {
     setUserVoiceSamples(prev => {
       const sampleToDelete = prev.find(s => s.id === id);
       if (sampleToDelete) {
-        addActivity(`Deleted voice sample: "${sampleToDelete.text.substring(0, 30)}..."`);
+        addActivity(`Deleted voice sample: "${sampleToDelete.text.substring(0, 30)}"...`);
         return prev.filter(s => s.id !== id);
       }
       return prev;

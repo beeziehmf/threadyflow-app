@@ -4,7 +4,6 @@
   --background-color: #f3f4f6;
   --sidebar-bg: #1f2937;
   --sidebar-text: #d1d5db;
-  --sidebar-active-bg: #374151;
   --card-bg: #ffffff;
   --text-primary: #111827;
   --text-secondary: #6b7280;
@@ -14,6 +13,14 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1),
     0 2px 4px -2px rgb(0 0 0 / 0.1);
   --radius: 0.5rem;
+
+  /* Threads-like colors */
+  --threads-black: #000000;
+  --threads-white: #ffffff;
+  --threads-gray: #e0e0e0;
+  --threads-gradient-start: #f09433;
+  --threads-gradient-middle: #e6683c;
+  --threads-gradient-end: #dc2743;
 }
 
 *,
@@ -102,12 +109,6 @@ body {
   background-color: var(--primary-color);
   color: white;
   box-shadow: var(--shadow-sm);
-}
-
-.nav-item a.disabled {
-    color: #6b7280;
-    cursor: not-allowed;
-    opacity: 0.6;
 }
 
 .nav-item a svg {
@@ -785,7 +786,7 @@ body {
     border-left: 3px solid transparent;
 }
 .calendar-post-item.threads {
-    background-color: #e2e8f0;
+    background-color: #e0e8f0;
     border-left-color: #4a5568;
     color: #2d3748;
 }
@@ -940,7 +941,7 @@ body {
 @media (max-width: 768px) {
   .app-container {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto 1fr;
     grid-template-areas:
       "header"
       "sidebar"
@@ -969,4 +970,218 @@ body {
   .calendar-post-item {
       font-size: 0.7rem;
   }
+}
+
+/* Auth Page Styles */
+.auth-page-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: var(--threads-white); /* Clean white background */
+    padding: 2rem;
+}
+
+.auth-card {
+    background-color: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 2rem;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    border: 1px solid var(--threads-gray); /* Subtle border */
+}
+
+.auth-header {
+    margin-bottom: 1.5rem;
+}
+
+.auth-logo {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(45deg, var(--threads-gradient-start), var(--threads-gradient-middle), var(--threads-gradient-end));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent; /* Fallback for non-webkit browsers */
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.05em; /* Adjust for attached letters look */
+}
+
+.auth-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.or-divider {
+    margin: 1.5rem 0;
+    position: relative;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.or-divider::before,
+.or-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background-color: var(--border-color);
+}
+
+.or-divider::before {
+    left: 0;
+}
+
+.or-divider::after {
+    right: 0;
+}
+
+/* Auth Page Buttons */
+.auth-card .button {
+    background-color: var(--threads-black);
+    color: var(--threads-white);
+    border-radius: 9999px; /* Pill shape */
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.auth-card .button:hover {
+    background-color: #333333;
+}
+
+.auth-card .button.bg-blue-600 {
+    background-color: #1877F2; /* Facebook blue */
+}
+.auth-card .button.bg-blue-600:hover {
+    background-color: #1565c0;
+}
+
+.auth-card .button.bg-red-600 {
+    background-color: #DB4437; /* Google red */
+}
+.auth-card .button.bg-red-600:hover {
+    background-color: #c0392b;
+}
+
+.auth-card .button-link {
+    color: var(--threads-black);
+    font-weight: 500;
+    text-decoration: none;
+}
+.auth-card .button-link:hover {
+    text-decoration: underline;
+}
+
+/* Connected Accounts in Sidebar */
+.connected-accounts-sidebar {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sidebar-active-bg);
+}
+
+.connected-accounts-sidebar h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #9ca3af;
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+}
+
+.connected-accounts-sidebar ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.connected-account-item-sidebar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    color: var(--sidebar-text);
+    font-size: 0.9rem;
+}
+
+.connected-account-item-sidebar .integration-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 0.8rem;
+}
+
+/* New Auth Page Split Layout */
+.auth-page-wrapper {
+    display: flex;
+    min-height: 100vh;
+    background-color: var(--threads-white);
+}
+
+.auth-visual-side {
+    flex: 1;
+    background-color: var(--threads-black); /* Dark background for visual side */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: var(--threads-white);
+    padding: 2rem;
+    text-align: center;
+}
+
+.visual-side-title {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+}
+
+.visual-side-subtitle {
+    font-size: 1.25rem;
+    max-width: 400px;
+}
+
+.auth-form-side {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+/* Social Button Logos */
+.social-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.social-logo {
+    width: 20px;
+    height: 20px;
+}
+
+/* Responsive adjustments for Auth Page */
+@media (max-width: 768px) {
+    .auth-page-wrapper {
+        flex-direction: column;
+    }
+    .auth-visual-side {
+        padding: 1rem;
+        min-height: 200px; /* Smaller height on mobile */
+    }
+    .visual-side-title {
+        font-size: 2rem;
+    }
+    .visual-side-subtitle {
+        font-size: 1rem;
+    }
+    .auth-form-side {
+        padding: 1rem;
+    }
 }
